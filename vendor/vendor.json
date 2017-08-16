@@ -1,0 +1,27 @@
+{
+  "comment": "",
+  "ignore": "",
+  "package": [
+    {
+      "checksumSHA1": "juHP+rGgwvxS7t2gOdyJj2pTxX4=",
+      "path": "github.com/labstack/echo",
+      "revision": "1049c9613cd371b7ea8f219404c9a821734781ed",
+      "revisionTime": "2017-04-26T17:09:29Z",
+      "version": "v3.1",
+      "versionExact": "v3.1.0"
+    },
+    {
+      "checksumSHA1": "Lsu9KRsRF1N8ypruEkQRUs5GtfQ=",
+      "path": "golang.org/x/crypto/acme",
+      "revision": "b176d7def5d71bdd214203491f89843ed217f420",
+      "revisionTime": "2017-07-23T04:49:35Z"
+    },
+    {
+      "checksumSHA1": "ivqYxrNmlF9QotbE0oGv3vowus0=",
+      "path": "golang.org/x/crypto/acme/autocert",
+      "revision": "b176d7def5d71bdd214203491f89843ed217f420",
+      "revisionTime": "2017-07-23T04:49:35Z"
+    }
+  ],
+  "rootPath": "sts"
+}
