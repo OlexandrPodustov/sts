@@ -72,7 +72,7 @@ func balance(c echo.Context) error {
 }
 
 func reset(c echo.Context) error {
-	// Get tournamentId and players from the query string
+	//
 
 	return c.String(http.StatusOK, "DB was cleared")
 }
