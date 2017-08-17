@@ -16,7 +16,9 @@ ENV PATH=$PATH:/usr/local/go/bin
 
 COPY . /usr/local/go/src/sts
 RUN cd /usr/local/go
-RUN go build sts/cmd
-#RUN ./cmd.exe &
+RUN env GOOS=linux GOARCH=amd64 go build -v sts/cmd
+#RUN /usr/local/go/src/sts/cmd.exe &
+RUN /usr/local/go/src/sts/cmd.exe &
 
-EXPOSE 80
+EXPOSE 8080
+CMD ["cmd", "/go/src/sts"]

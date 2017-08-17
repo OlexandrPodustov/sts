@@ -89,5 +89,5 @@ func main() {
 	e.GET("/balance", balance)
 	e.GET("/reset", reset)
 
-	e.Logger.Fatal(e.Start(":1323"))
+	e.Logger.Fatal(e.Start(":8080"))
 }
