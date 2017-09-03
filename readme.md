@@ -18,11 +18,7 @@ http://localhost:8080/reset
 
 --create db
 use stsDB
-
 show dbs
-
-db.PlayersCollection.insert({"name":"tutorials point"})
-
 db.PlayersCollection.find()
 
 db.dropDatabase()

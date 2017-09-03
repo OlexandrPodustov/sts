@@ -1,15 +1,14 @@
 package main
 
 import (
-	"github.com/labstack/echo"
 	"sts"
+
+	"github.com/labstack/echo"
 )
 
 func main() {
 	e := echo.New()
 
-	e.GET("/users/:id", sts.GetUser)
-	e.GET("/take", sts.Take)
 	e.GET("/fund", sts.Fund)
 	e.GET("/announceTournament", sts.AnnounceTournament)
 	e.GET("/joinTournament", sts.JoinTournament)

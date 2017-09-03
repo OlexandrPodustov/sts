@@ -1,72 +1,55 @@
 package sts
 
 import (
-	"fmt"
-	"github.com/labstack/echo"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
+
+	"github.com/labstack/echo"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
-var (
-	mongo_address = os.Getenv("MONGO_ADDRESS")
-	MgoAddr       = mongo_address //+ ":27017"
+const (
+	dbName          = "stsDB"
+	playersColl     = "PlayersCollection"
+	tournamentsColl = "TournamentsCollection"
 )
+
+var mongo_address = os.Getenv("MONGO_ADDRESS")
 
 type Player struct {
-	ID     bson.ObjectId `bson:"_id,omitempty"`
-	Name   string
-	Points int
+	ID        bson.ObjectId `bson:"_id,omitempty"`
+	Name      string
+	Points    int
+	Timestamp time.Time
 }
 
-func init() {
-	session, err := mgo.Dial("172.17.0.2")
+//e.GET("/fund?playerId=P1&points=300", fund)
+func Fund(c echo.Context) error {
+	// Get playerID and points from the query string
+	playerId := c.QueryParam("playerId")
+	points := c.QueryParam("points")
+	pointsConverted, err := strconv.Atoi(points)
 	if err != nil {
-		log.Println("2")
 		panic(err)
-		log.Println("3", MgoAddr)
+	}
+
+	session, err := mgo.Dial(mongo_address)
+	if err != nil {
+		panic(err)
 	}
 	defer session.Close()
-
-	c := session.DB("stsDB").C("PlayersCollection")
-	err = c.Insert(&Player{Name: "Ale", Points: 11112},
-		&Player{Name: "Cla", Points: 222})
+	//todo: check whether user exists or not, before inserting a row into collection
+	//or we just can implement a different logic of retreiving balance
+	collection := session.DB(dbName).C(playersColl)
+	err = collection.Insert(&Player{Name: playerId, Points: pointsConverted, Timestamp: time.Now()})
 	if err != nil {
+		return c.String(http.StatusInternalServerError, "Unable to insert data into database")
 		log.Fatal(err)
 	}
-
-	result := Player{}
-	err = c.Find(bson.M{"name": "Ale"}).One(&result)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("Ale's Points:", result.Points)
-}
-
-// e.GET("/users/:id", getUser)
-func GetUser(c echo.Context) error {
-	// User ID from path `users/:id`
-	id := c.Param("id")
-	return c.String(http.StatusOK, id)
-}
-
-//e.GET("/take", take)
-func Take(c echo.Context) error {
-	// Get team and points from the query string
-	playerId := c.QueryParam("playerId")
-	points := c.QueryParam("points")
-	return c.String(http.StatusOK, "playerId:"+playerId+", will be charged from his balance, points:"+points)
-}
-
-//e.GET("/fund", fund)
-func Fund(c echo.Context) error {
-	// Get team and points from the query string
-	playerId := c.QueryParam("playerId")
-	points := c.QueryParam("points")
-
 	log.Println("Fund", playerId, points)
 
 	return c.String(http.StatusOK, "playerId:"+playerId+", will receive to his balance, points:"+points)
@@ -111,14 +94,39 @@ func ResultTournament(c echo.Context) error {
 func Balance(c echo.Context) error {
 	// Get tournamentId and players from the query string
 	playerId := c.QueryParam("playerId")
-	return c.String(http.StatusOK, "balance"+playerId)
+
+	session, err := mgo.Dial(mongo_address)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+	collection := session.DB(dbName).C(playersColl)
+
+	result := Player{}
+	//current implementation as the result of points gives the amount from the first row.
+	//todo: change One with All, then range the map, calculate overall points, give the proper response
+	err = collection.Find(bson.M{"name": playerId}).One(&result)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Unable to retrieve data from database, maybe there is no such player")
+		log.Fatal(err)
+	}
+
+	return c.JSON(http.StatusOK, result)
 }
 
 func ResetDB(c echo.Context) error {
 	m := "DB was cleared. "
-	m2 := "mongo_address:" + MgoAddr
-	completeMessage := m + m2
-	log.Println(completeMessage)
+	log.Println(m)
+	session, err := mgo.Dial(mongo_address)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
 
-	return c.String(http.StatusOK, completeMessage)
+	err = session.DB(dbName).DropDatabase()
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Unable to drop database")
+		log.Fatal(err)
+	}
+	return c.String(http.StatusOK, m)
 }
