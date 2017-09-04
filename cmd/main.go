@@ -10,6 +10,7 @@ func main() {
 	e := echo.New()
 
 	e.GET("/fund", sts.Fund)
+	e.GET("/take", sts.Take)
 	e.GET("/announceTournament", sts.AnnounceTournament)
 	e.GET("/joinTournament", sts.JoinTournament)
 	e.POST("/resultTournament", sts.ResultTournament)
