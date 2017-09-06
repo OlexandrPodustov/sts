@@ -1,6 +1,7 @@
 package sts
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -22,9 +23,15 @@ var mongo_address = os.Getenv("MONGO_ADDRESS")
 
 type Player struct {
 	ID        bson.ObjectId `bson:"_id,omitempty"`
-	Name      string
-	Points    int
+	PlayerId  string
+	PointsOld int
+	Balance   int
 	Timestamp time.Time
+}
+
+type resultPlayer struct {
+	PlayerId string
+	Balance  int
 }
 
 //e.GET("/take?playerId=P1&points=300", fund)
@@ -32,51 +39,52 @@ func Take(c echo.Context) error {
 	// Get playerID and points from the query string
 	playerId := c.QueryParam("playerId")
 	points := c.QueryParam("points")
-	pointsConverted, err := strconv.Atoi(points)
+	pointsToCharge, err := strconv.Atoi(points)
 	if err != nil {
 		panic(err)
 	}
-	//pp := (-1) * pointsConverted
 
 	session, err := mgo.Dial(mongo_address)
 	if err != nil {
 		panic(err)
 	}
 	defer session.Close()
-	//todo: check whether user exists or not, before inserting a row into collection
-	//or we just can implement a different logic of retreiving balance
 	collection := session.DB(dbName).C(playersColl)
-	//check if player has sufficient amount of points
+
 	result := Player{}
-	err = collection.Find(bson.M{"name": playerId}).One(&result)
+	err = collection.Find(bson.M{"playerid": playerId}).Sort("-timestamp").One(&result)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Unable to retrieve data from database, maybe there is no such player")
-		log.Fatal(err)
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 	}
-	var res string
-	des := strconv.Itoa(result.Points)
-	if result.Points-pointsConverted >= 0 {
-		err = collection.Insert(&Player{Name: playerId, Points: -pointsConverted, Timestamp: time.Now()})
+	var response string
+	currentPointsString := strconv.Itoa(result.Balance)
+	if calculatedPoints := result.Balance - pointsToCharge; calculatedPoints >= 0 {
+		err = collection.Insert(&Player{
+			PlayerId:  playerId,
+			PointsOld: result.Balance,
+			Balance:   calculatedPoints,
+			Timestamp: time.Now()})
+
 		if err != nil {
-			return c.String(http.StatusInternalServerError, "Unable to insert data into database")
-			log.Fatal(err)
+			log.Println(err)
+			return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 		}
-		res = "player " + playerId + " points from db " + des + " points wanted to charge " + points
-		log.Println("player ", playerId, " points from db ", result.Points, " points wanted to charge ", points)
+		response = "player " + playerId + " points from db " + currentPointsString + " points wanted to charge " + points
 	} else {
-		res = "Take can't be processed, cause of insufficient amount of points " + playerId + " current amount " + des
-		log.Println("Take can't be processed, cause of insufficient amount of points ", playerId, "current amount", result.Points)
+		response = "Take can't be processed. Insufficient amount of points: player - " + playerId + " points wanted to charge " + points
 	}
 
-	return c.String(http.StatusOK, res)
+	return c.String(http.StatusOK, response)
 }
 
 //e.GET("/fund?playerId=P1&points=300", fund)
 func Fund(c echo.Context) error {
+	var response string
 	// Get playerID and points from the query string
 	playerId := c.QueryParam("playerId")
 	points := c.QueryParam("points")
-	pointsConverted, err := strconv.Atoi(points)
+	pointsToFund, err := strconv.Atoi(points)
 	if err != nil {
 		panic(err)
 	}
@@ -86,17 +94,41 @@ func Fund(c echo.Context) error {
 		panic(err)
 	}
 	defer session.Close()
-	//todo: check whether user exists or not, before inserting a row into collection
-	//or we just can implement a different logic of retreiving balance
-	collection := session.DB(dbName).C(playersColl)
-	err = collection.Insert(&Player{Name: playerId, Points: pointsConverted, Timestamp: time.Now()})
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Unable to insert data into database")
-		log.Fatal(err)
-	}
-	log.Println("Fund", playerId, points)
 
-	return c.String(http.StatusOK, "playerId:"+playerId+", will receive to his balance, points:"+points)
+	collection := session.DB(dbName).C(playersColl)
+
+	result := Player{}
+	err = collection.Find(bson.M{"playerid": playerId}).Sort("-timestamp").One(&result)
+	if err == nil {
+		log.Println("player found, updating...")
+		err = collection.Insert(&Player{
+			PlayerId:  playerId,
+			PointsOld: result.Balance,
+			Balance:   result.Balance + pointsToFund,
+			Timestamp: time.Now()})
+
+		if err != nil {
+			log.Println(err)
+			return c.String(http.StatusInternalServerError, fmt.Sprint(err))
+		}
+	} else if p := err.Error(); p == "not found" {
+		log.Println("player wasn't found, first insertion")
+		err = collection.Insert(&Player{
+			PlayerId:  playerId,
+			PointsOld: 0,
+			Balance:   pointsToFund,
+			Timestamp: time.Now()})
+
+		if err != nil {
+			log.Println(err)
+			return c.String(http.StatusInternalServerError, fmt.Sprint(err))
+		}
+	} else {
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
+	}
+
+	return c.String(http.StatusOK, response)
 }
 
 func AnnounceTournament(c echo.Context) error {
@@ -147,15 +179,18 @@ func Balance(c echo.Context) error {
 	collection := session.DB(dbName).C(playersColl)
 
 	result := Player{}
-	//current implementation as the result of points gives the amount from the first row.
-	//todo: change One with All, then range the map, calculate overall points, give the proper response
-	err = collection.Find(bson.M{"name": playerId}).One(&result)
+	err = collection.Find(bson.M{"playerid": playerId}).Sort("-timestamp").One(&result)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Unable to retrieve data from database, maybe there is no such player")
-		log.Fatal(err)
+		log.Println(err)
+		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 	}
 
-	return c.JSON(http.StatusOK, result)
+	narrowedResult := resultPlayer{
+		result.PlayerId,
+		result.Balance,
+	}
+
+	return c.JSON(http.StatusOK, narrowedResult)
 }
 
 func ResetDB(c echo.Context) error {
@@ -169,8 +204,8 @@ func ResetDB(c echo.Context) error {
 
 	err = session.DB(dbName).DropDatabase()
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Unable to drop database")
-		log.Fatal(err)
+		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
+		log.Println(err)
 	}
 	return c.String(http.StatusOK, m)
 }
