@@ -12,8 +12,8 @@ func main() {
 	e.GET("/fund", sts.Fund)
 	e.GET("/take", sts.Take)
 	e.GET("/announceTournament", sts.AnnounceTournament)
-	e.GET("/joinTournament", sts.JoinTournament)
-	e.POST("/resultTournament", sts.ResultTournament)
+	e.GET("/joinTournament", sts.JoinTournament)      //not completed
+	e.POST("/resultTournament", sts.ResultTournament) //not completed
 	e.GET("/balance", sts.Balance)
 	e.GET("/reset", sts.ResetDB)
 

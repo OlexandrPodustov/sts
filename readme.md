@@ -22,3 +22,5 @@ http://localhost:8080/joinTournament?tournamentId=1&playerId=P1&backerId=P2&back
 POST http://localhost:8080/resultTournament  
 http://localhost:8080/balance?playerId=P1  
 http://localhost:8080/reset  
+
+//todo for me - implement concurrent access to db with lock by user and probably tournament
