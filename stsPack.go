@@ -34,6 +34,19 @@ type resultPlayer struct {
 	PlayerId string
 	Balance  int
 }
+
+type playerWithBackers struct {
+	PlayerId string
+	Backers  []backer
+}
+
+type backer struct {
+	BackerId     string
+	Balance      int
+	InterestAmt  int
+	InterestRate int
+}
+
 type winnPlayer struct {
 	PlayerId string
 	Prize    int
@@ -43,7 +56,7 @@ type tournament struct {
 	ID           bson.ObjectId `bson:"_id,omitempty"`
 	TournamentId int
 	Deposit      int
-	Players      []resultPlayer
+	Player       playerWithBackers
 	Winners      []winnPlayer
 	Timestamp    time.Time
 }
@@ -197,22 +210,19 @@ func AnnounceTournament(c echo.Context) error {
 func JoinTournament(c echo.Context) error {
 	// Get tournamentId and players from the query string
 	tournam := c.QueryParam("tournamentId")
-	player := c.QueryParam("playerId")
+	playerid := c.QueryParam("playerId")
 	tournamentId, err := strconv.Atoi(tournam)
 	if err != nil {
 		panic(err)
 	}
-	//playerId, err := strconv.Atoi(player)
-	//if err != nil {
-	//	panic(err)
-	//}
-	allQueryValues := c.QueryParams()
+	//allQueryValues := c.QueryParams()
 
-	var sliceOfBakers []string
-	var allBakers string
-	for key, val := range allQueryValues {
+	var sliceOfBakers []backer
+	for key, val := range c.QueryParams() {
 		if key == "backerId" {
-			sliceOfBakers = append(sliceOfBakers, val...)
+			for _, v := range val {
+				sliceOfBakers = append(sliceOfBakers, backer{BackerId: v})
+			}
 		}
 	}
 
@@ -227,16 +237,43 @@ func JoinTournament(c echo.Context) error {
 	result := tournament{}
 	err = collection.Find(bson.M{"tournamentid": tournamentId}).Sort("-timestamp").One(&result)
 	if err == nil {
-		log.Println(result)
-		newPlayer := resultPlayer{PlayerId: player}
-		var players []resultPlayer
-		players = append(result.Players, newPlayer)
-		err = collection.Insert(&tournament{TournamentId: result.TournamentId, Players: players})
-		log.Println("Tournament found, joining")
+		newPlayer := playerWithBackers{PlayerId: playerid, Backers: sliceOfBakers}
+		//commented due to incomplete status. Start.
+		//collec2 := session.DB(dbName).C(playersColl)
+		//if len(sliceOfBakers) > 0 {
+		//	//retrieving the deposit amount of the tournament
+		//	amt := result.Deposit / (len(sliceOfBakers) + 1)
+		//
+		//	//check the balance should be done during charging the player.
+		//	//Between two actions (check here and redeem there) the player or redeemer can perform other action?
+		//	//If yes implementation should be changed.
+		//	log.Println(result.Deposit, len(sliceOfBakers)+1, amt)
+		//	playerBalance := player{}
+		//	err = collec2.Find(bson.M{"playerid": playerid}).Sort("-timestamp").One(&playerBalance)
+		//	//checking the balance of the playerid, and of backers //todo: concurrently
+		//	if err != nil {
+		//		log.Println(err)
+		//		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
+		//	}
+		//	log.Println(playerBalance.Balance >= amt)
+		//} else {
+		//	log.Println("there are no backers, checking the balance of the playerid")
+		//	playerBalance := player{}
+		//	err = collec2.Find(bson.M{"playerid": playerid}).Sort("-timestamp").One(&playerBalance)
+		//	log.Println(result.Deposit, playerBalance.Balance, playerBalance.Balance >= result.Deposit)
+		//}
+		//todo: add check whether such a playerid is already in this tournament or not. If not - then update.
+		err = collection.Insert(
+			&tournament{
+				TournamentId: result.TournamentId,
+				Deposit:      result.Deposit,
+				Player:       newPlayer})
+
 		if err != nil {
 			log.Println(err)
 			return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 		}
+		log.Println("Tournament found, joining")
 	} else if p := err.Error(); p == "not found" {
 		log.Println("Tournament not found, doing nothing. Can't join unexisting tournament")
 	} else {
@@ -244,10 +281,7 @@ func JoinTournament(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 	}
 
-	for _, v := range sliceOfBakers {
-		allBakers += v + ", "
-	}
-	return c.String(http.StatusOK, "tournamentId:"+tournam+", playerId:"+player+", allQueryValues:"+allBakers)
+	return c.String(http.StatusOK, "tournamentId:"+tournam+", playerId:"+playerid)
 }
 
 // e.POST("/resultTournament", resultTournament)
