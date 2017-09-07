@@ -252,6 +252,22 @@ func JoinTournament(c echo.Context) error {
 		//	err = collec2.Find(bson.M{"playerid": playerid}).Sort("-timestamp").One(&playerBalance)
 		//	//checking the balance of the playerid, and of backers
 		// todo: probably spin goroutines with request to db, charge only if all backers and player will have sufficient amount of points
+		//smth like
+		//1. create and fill a slice of player and backers with their IDs
+		var sliceOfBakersAndPlayers []string
+		for _, id := range sliceOfBakers {
+			sliceOfBakersAndPlayers = append(sliceOfBakersAndPlayers, id.BackerId)
+		}
+		sliceOfBakersAndPlayers = append(sliceOfBakersAndPlayers, playerid)
+		//2. range on that slice with spinning goroutines
+		for _, id := range sliceOfBakersAndPlayers {
+			go func(id string) {
+				//go to db - and check if each one have sufficient amount of points with lock by player
+				//send info to channel
+				//process all responces. if all of them are true - redeem points
+				//release locks by player
+			}(id)
+		}
 		//	if err != nil {
 		//		log.Println(err)
 		//		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
