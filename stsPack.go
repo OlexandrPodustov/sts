@@ -250,7 +250,8 @@ func JoinTournament(c echo.Context) error {
 		//	log.Println(result.Deposit, len(sliceOfBakers)+1, amt)
 		//	playerBalance := player{}
 		//	err = collec2.Find(bson.M{"playerid": playerid}).Sort("-timestamp").One(&playerBalance)
-		//	//checking the balance of the playerid, and of backers //todo: concurrently
+		//	//checking the balance of the playerid, and of backers
+		// todo: probably spin goroutines with request to db, charge only if all backers and player will have sufficient amount of points
 		//	if err != nil {
 		//		log.Println(err)
 		//		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
