@@ -14,72 +14,44 @@ import (
 )
 
 const (
-	dbName                 = "stsDB"
-	playersColl            = "PlayersCollection"
-	tournamentsColl        = "TournamentsCollection"
-	tournamentsPlayersColl = "TournamentsPlayersCollection"
+	dbName          = "stsDB"
+	playersColl     = "PlayersCollection"
+	tournamentsColl = "TournamentsCollection"
 )
 
-var mongo_address = os.Getenv("MONGO_ADDRESS")
+var mongoDB *mgo.Session
 
-type player struct {
-	ID        bson.ObjectId `bson:"_id,omitempty"`
-	PlayerId  string
-	PointsOld int
-	Balance   int
-	Timestamp time.Time
+func Init() {
+	mongoAddress := os.Getenv("MONGO_ADDRESS")
+	if mongoAddress == "" {
+		log.Fatal("empty mongo db address")
+	}
+
+	session, err := mgo.Dial(mongoAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = session.Ping()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mongoDB = session
 }
 
-type resultPlayer struct {
-	PlayerId string
-	Balance  int
-}
-
-type playerWithBackers struct {
-	PlayerId string
-	Backers  []backer
-}
-
-type backer struct {
-	BackerId     string
-	Balance      int
-	InterestAmt  int
-	InterestRate int
-}
-
-type winnPlayer struct {
-	PlayerId string
-	Prize    int
-}
-
-type tournament struct {
-	ID           bson.ObjectId `bson:"_id,omitempty"`
-	TournamentId int
-	Deposit      int
-	Player       playerWithBackers
-	Winners      []winnPlayer
-	Timestamp    time.Time
-}
-
-//e.GET("/take?playerId=P1&points=300", fund)
 func Take(c echo.Context) error {
-	// Get playerID and points from the query string
-	playerId := c.QueryParam("playerId")
+	playerID := c.QueryParam("playerId")
 	points := c.QueryParam("points")
 	pointsToCharge, err := strconv.Atoi(points)
 	if err != nil {
 		panic(err)
 	}
 
-	session, err := mgo.Dial(mongo_address)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-	collection := session.DB(dbName).C(playersColl)
+	collection := mongoDB.DB(dbName).C(playersColl)
 
 	result := player{}
-	err = collection.Find(bson.M{"playerid": playerId}).Sort("-timestamp").One(&result)
+	err = collection.Find(bson.M{"playerid": playerID}).Sort("-timestamp").One(&result)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
@@ -88,7 +60,7 @@ func Take(c echo.Context) error {
 	currentPointsString := strconv.Itoa(result.Balance)
 	if calculatedPoints := result.Balance - pointsToCharge; calculatedPoints >= 0 {
 		err = collection.Insert(&player{
-			PlayerId:  playerId,
+			PlayerId:  playerID,
 			PointsOld: result.Balance,
 			Balance:   calculatedPoints,
 			Timestamp: time.Now()})
@@ -97,39 +69,30 @@ func Take(c echo.Context) error {
 			log.Println(err)
 			return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 		}
-		response = "player " + playerId + " points from db " + currentPointsString + " points wanted to charge " + points
+		response = "player " + playerID + " points from db " + currentPointsString + " points wanted to charge " + points
 	} else {
-		response = "Take can't be processed. Insufficient amount of points: player - " + playerId + " points wanted to charge " + points
+		response = "Take can't be processed. Insufficient amount of points: player - " + playerID + " points wanted to charge " + points
 	}
 
 	return c.String(http.StatusOK, response)
 }
 
-//e.GET("/fund?playerId=P1&points=300", fund)
 func Fund(c echo.Context) error {
-	var response string
-	// Get playerID and points from the query string
-	playerId := c.QueryParam("playerId")
+	playerID := c.QueryParam("playerId")
 	points := c.QueryParam("points")
 	pointsToFund, err := strconv.Atoi(points)
 	if err != nil {
 		panic(err)
 	}
 
-	session, err := mgo.Dial(mongo_address)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-
-	collection := session.DB(dbName).C(playersColl)
+	collection := mongoDB.DB(dbName).C(playersColl)
 
 	result := player{}
-	err = collection.Find(bson.M{"playerid": playerId}).Sort("-timestamp").One(&result)
+	err = collection.Find(bson.M{"playerid": playerID}).Sort("-timestamp").One(&result)
 	if err == nil {
 		log.Println("player found, updating...")
 		err = collection.Insert(&player{
-			PlayerId:  playerId,
+			PlayerId:  playerID,
 			PointsOld: result.Balance,
 			Balance:   result.Balance + pointsToFund,
 			Timestamp: time.Now()})
@@ -141,7 +104,7 @@ func Fund(c echo.Context) error {
 	} else if p := err.Error(); p == "not found" {
 		log.Println("player wasn't found, first insertion")
 		err = collection.Insert(&player{
-			PlayerId:  playerId,
+			PlayerId:  playerID,
 			PointsOld: 0,
 			Balance:   pointsToFund,
 			Timestamp: time.Now()})
@@ -155,13 +118,12 @@ func Fund(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 	}
 
-	return c.String(http.StatusOK, response)
+	return c.String(http.StatusOK, "done")
 }
 
 func AnnounceTournament(c echo.Context) error {
-	// Get tournamentId and deposit from the query string
 	tournam := c.QueryParam("tournamentId")
-	tournamentId, err := strconv.Atoi(tournam)
+	tournamentID, err := strconv.Atoi(tournam)
 	if err != nil {
 		panic(err)
 	}
@@ -172,16 +134,10 @@ func AnnounceTournament(c echo.Context) error {
 		panic(err)
 	}
 
-	session, err := mgo.Dial(mongo_address)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-
-	collection := session.DB(dbName).C(tournamentsColl)
+	collection := mongoDB.DB(dbName).C(tournamentsColl)
 
 	result := tournament{}
-	err = collection.Find(bson.M{"tournamentid": tournamentId}).Sort("-timestamp").One(&result)
+	err = collection.Find(bson.M{"tournamentid": tournamentID}).Sort("-timestamp").One(&result)
 	if err == nil {
 		log.Println("Tournament found, doing nothing. Can't insert tournament with the same id")
 		/*err = collection.Insert(&tournament{TournamentId: tournamentId, Deposit: deposit})
@@ -192,7 +148,7 @@ func AnnounceTournament(c echo.Context) error {
 		}*/
 	} else if p := err.Error(); p == "not found" {
 		log.Println("Tournament wasn't found, creating one")
-		err = collection.Insert(&tournament{TournamentId: tournamentId, Deposit: deposit})
+		err = collection.Insert(&tournament{TournamentId: tournamentID, Deposit: deposit})
 
 		if err != nil {
 			log.Println(err)
@@ -206,16 +162,14 @@ func AnnounceTournament(c echo.Context) error {
 	return c.String(http.StatusOK, "tournamentId:"+tournam+", deposit:"+depos)
 }
 
-//not completed
 func JoinTournament(c echo.Context) error {
-	// Get tournamentId and players from the query string
+	playerID := c.QueryParam("playerId")
+
 	tournam := c.QueryParam("tournamentId")
-	playerid := c.QueryParam("playerId")
-	tournamentId, err := strconv.Atoi(tournam)
+	tournamentID, err := strconv.Atoi(tournam)
 	if err != nil {
 		panic(err)
 	}
-	//allQueryValues := c.QueryParams()
 
 	var sliceOfBakers []backer
 	for key, val := range c.QueryParams() {
@@ -226,18 +180,12 @@ func JoinTournament(c echo.Context) error {
 		}
 	}
 
-	session, err := mgo.Dial(mongo_address)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-
-	collection := session.DB(dbName).C(tournamentsColl)
+	collection := mongoDB.DB(dbName).C(tournamentsColl)
 
 	result := tournament{}
-	err = collection.Find(bson.M{"tournamentid": tournamentId}).Sort("-timestamp").One(&result)
+	err = collection.Find(bson.M{"tournamentid": tournamentID}).Sort("-timestamp").One(&result)
 	if err == nil {
-		newPlayer := playerWithBackers{PlayerId: playerid, Backers: sliceOfBakers}
+		newPlayer := playerWithBackers{PlayerId: playerID, Backers: sliceOfBakers}
 		//commented due to incomplete status. Start.
 		//collec2 := session.DB(dbName).C(playersColl)
 		//if len(sliceOfBakers) > 0 {
@@ -258,7 +206,7 @@ func JoinTournament(c echo.Context) error {
 		for _, id := range sliceOfBakers {
 			sliceOfBakersAndPlayers = append(sliceOfBakersAndPlayers, id.BackerId)
 		}
-		sliceOfBakersAndPlayers = append(sliceOfBakersAndPlayers, playerid)
+		sliceOfBakersAndPlayers = append(sliceOfBakersAndPlayers, playerID)
 		//2. range on that slice with spinning goroutines
 		for _, id := range sliceOfBakersAndPlayers {
 			go func(id string) {
@@ -298,31 +246,23 @@ func JoinTournament(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
 	}
 
-	return c.String(http.StatusOK, "tournamentId:"+tournam+", playerId:"+playerid)
+	return c.String(http.StatusOK, "tournamentId:"+tournam+", playerId:"+playerID)
 }
 
-// e.POST("/resultTournament", resultTournament)
-//not completed
 func ResultTournament(c echo.Context) error {
-	// Get tournamentId and players from the query string
 	name := c.FormValue("name")
 	email := c.FormValue("email")
+
 	return c.String(http.StatusOK, "name:"+name+", email:"+email)
 }
 
 func Balance(c echo.Context) error {
-	// Get tournamentId and players from the query string
-	playerId := c.QueryParam("playerId")
+	playerID := c.QueryParam("playerId")
 
-	session, err := mgo.Dial(mongo_address)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-	collection := session.DB(dbName).C(playersColl)
+	collection := mongoDB.DB(dbName).C(playersColl)
 
 	result := player{}
-	err = collection.Find(bson.M{"playerid": playerId}).Sort("-timestamp").One(&result)
+	err := collection.Find(bson.M{"playerid": playerID}).Sort("-timestamp").One(&result)
 	if err != nil {
 		log.Println(err)
 		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
@@ -337,18 +277,13 @@ func Balance(c echo.Context) error {
 }
 
 func ResetDB(c echo.Context) error {
-	m := "DB was cleared. "
-	log.Println(m)
-	session, err := mgo.Dial(mongo_address)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-
-	err = session.DB(dbName).DropDatabase()
+	err := mongoDB.DB(dbName).DropDatabase()
 	if err != nil {
 		return c.String(http.StatusInternalServerError, fmt.Sprint(err))
-		log.Println(err)
 	}
+
+	m := "DB was cleared"
+	log.Println(m)
+
 	return c.String(http.StatusOK, m)
 }

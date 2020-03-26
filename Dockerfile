@@ -1,8 +1,8 @@
-FROM golang:1.8
-WORKDIR /go/src/sts
+FROM golang:1.14.1
+WORKDIR /go/src/github.com/OlexandrPodustov/sts
 COPY . .
 
-RUN go install sts/cmd
+RUN go install ./cmd
 
 ENV MONGO_ADDRESS=172.17.0.2
 
